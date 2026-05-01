@@ -22,11 +22,10 @@ input[type="number"] { width: 40px; }
 </head>
 <body>
 
-<h1>Рейтинг участников</h1>
+<h1 onclick="secretAdmin()" style="cursor:default;">Рейтинг участников</h1>
 
+<!-- Только кнопка таблицы -->
 <button onclick="showPage('view')">Таблица</button>
-<button onclick="showPage('admin')">Админ</button>
-<button onclick="showPage('history')">История</button>
 
 <div id="viewPage">
   <h2>Общий рейтинг</h2>
@@ -48,10 +47,11 @@ input[type="number"] { width: 40px; }
   <div id="adminPanel" class="hidden">
     <h2>Управление</h2>
     <input id="nameInput" placeholder="Фамилия Имя">
-    <br><br>
-    🔍 Поиск: <input id="searchInput" placeholder="Введите фамилию" oninput="render()">
     <label><input type="checkbox" id="outCheck"> вне зачёта</label>
     <button onclick="addChild()">Добавить</button>
+
+    <br><br>
+    🔍 Поиск: <input id="searchInput" placeholder="Введите фамилию" oninput="render()">
 
     <table>
       <thead>
@@ -72,9 +72,12 @@ input[type="number"] { width: 40px; }
   </div>
 </div>
 
-<div id="historyPage" class="hidden">
-  <h2>История изменений</h2>
-  <ul id="historyList"></ul>
+<!-- История полностью скрыта -->
+<div id="historyPage" class="hidden" style="display:none;"></div>
+
+<!-- Скрытая кнопка входа -->
+<div style="position:fixed; bottom:5px; right:5px;">
+  <button onclick="showPage('admin')" style="opacity:0.05; font-size:8px;">.</button>
 </div>
 
 <script>
@@ -103,6 +106,16 @@ function login() {
     document.getElementById('loginBlock').classList.add('hidden');
     document.getElementById('adminPanel').classList.remove('hidden');
   } else alert("Неверный пароль");
+}
+
+function secretAdmin() {
+  let clicks = (window._clicks || 0) + 1;
+  window._clicks = clicks;
+  if (clicks >= 3) {
+    showPage('admin');
+    window._clicks = 0;
+  }
+  setTimeout(()=> window._clicks = 0, 1500);
 }
 
 function normalizeName(name) {
@@ -143,13 +156,11 @@ function deleteChild(i) {
 function updateDay(i, key, val) {
   if (val == 1 || val == 2) data[i].days[key] = Number(val);
   else delete data[i].days[key];
-  log("Обновлены тренировки: " + data[i].name);
   save();
 }
 
 function update(i, field, val) {
   data[i][field] = field==='comment'? val : Number(val);
-  log("Обновлены данные: " + data[i].name);
   save();
 }
 
@@ -162,11 +173,9 @@ function calc(c) {
 function render() {
   const viewBody = document.getElementById('viewBody');
   const adminBody = document.getElementById('adminBody');
-  const historyList = document.getElementById('historyList');
 
   viewBody.innerHTML = '';
   adminBody.innerHTML = '';
-  historyList.innerHTML = '';
 
   let sorted = [...data].sort((a,b)=>calc(b)-calc(a));
 
@@ -179,13 +188,10 @@ function render() {
   });
 
   let adminList = [...data].sort((a,b)=> a.name.localeCompare(b.name));
-
   const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
-  if (search) {
-    adminList = adminList.filter(c => c.name.toLowerCase().includes(search));
-  }
+  if (search) adminList = adminList.filter(c => c.name.toLowerCase().includes(search));
 
-  adminList.forEach((c)=>{
+  adminList.forEach(c=>{
     const i = data.indexOf(c);
     const tr = document.createElement('tr');
 
@@ -224,12 +230,6 @@ function render() {
     `;
 
     adminBody.appendChild(tr);
-  });
-
-  history.forEach(h=>{
-    const li = document.createElement('li');
-    li.textContent = h;
-    historyList.appendChild(li);
   });
 }
 
