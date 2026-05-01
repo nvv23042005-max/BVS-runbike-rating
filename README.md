@@ -1,1 +1,247 @@
-# BVS-runbike-rating
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Рейтинг беговел</title>
+<style>
+body { font-family: Arial; margin: 20px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+th, td { border: 1px solid #ccc; padding: 5px; text-align: center; }
+th { background: #f0f0f0; }
+button { padding: 6px 12px; margin: 5px; cursor: pointer; }
+.hidden { display: none; }
+.top7 { background: #c8f7c5; }
+.out { background: orange; }
+input[type="number"] { width: 40px; }
+.monthBlock { max-width: 250px; overflow-x: auto; }
+.dayCell { font-size:10px; display:inline-block; width:45px; }
+.deleteBtn { background: #ff6b6b; color: white; border: none; padding: 4px 8px; cursor: pointer; }
+.monthHeader { cursor:pointer; background:#eee; padding:3px; }
+</style>
+</head>
+<body>
+
+<h1>Рейтинг участников</h1>
+
+<button onclick="showPage('view')">Таблица</button>
+<button onclick="showPage('admin')">Админ</button>
+<button onclick="showPage('history')">История</button>
+
+<div id="viewPage">
+  <h2>Общий рейтинг</h2>
+  <table>
+    <thead>
+      <tr><th>Имя</th><th>Баллы</th></tr>
+    </thead>
+    <tbody id="viewBody"></tbody>
+  </table>
+</div>
+
+<div id="adminPage" class="hidden">
+  <h2>Админ вход</h2>
+  <div id="loginBlock">
+    <input type="password" id="password" placeholder="Пароль">
+    <button onclick="login()">Войти</button>
+  </div>
+
+  <div id="adminPanel" class="hidden">
+    <h2>Управление</h2>
+    <input id="nameInput" placeholder="Фамилия Имя">
+    <br><br>
+    🔍 Поиск: <input id="searchInput" placeholder="Введите фамилию" oninput="render()">
+    <label><input type="checkbox" id="outCheck"> вне зачёта</label>
+    <button onclick="addChild()">Добавить</button>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Имя</th>
+          <th>Май</th>
+          <th>Июнь</th>
+          <th>Июль</th>
+          <th>Местные</th>
+          <th>Выездные</th>
+          <th>Комментарий</th>
+          <th>Итог</th>
+          <th>Удалить</th>
+        </tr>
+      </thead>
+      <tbody id="adminBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="historyPage" class="hidden">
+  <h2>История изменений</h2>
+  <ul id="historyList"></ul>
+</div>
+
+<script>
+const ADMIN_PASSWORD = "2304";
+let data = JSON.parse(localStorage.getItem('runbikeData')) || [];
+let history = JSON.parse(localStorage.getItem('runbikeHistory')) || [];
+
+const months = [
+  {name:'Май', code:'05', days:31},
+  {name:'Июнь', code:'06', days:30},
+  {name:'Июль', code:'07', days:31}
+];
+
+function save() {
+  localStorage.setItem('runbikeData', JSON.stringify(data));
+  localStorage.setItem('runbikeHistory', JSON.stringify(history));
+  render();
+}
+
+function log(action) {
+  history.unshift(new Date().toLocaleString() + " — " + action);
+}
+
+function login() {
+  if (document.getElementById('password').value === ADMIN_PASSWORD) {
+    document.getElementById('loginBlock').classList.add('hidden');
+    document.getElementById('adminPanel').classList.remove('hidden');
+  } else alert("Неверный пароль");
+}
+
+function normalizeName(name) {
+  return name.trim().toLowerCase();
+}
+
+function addChild() {
+  const name = document.getElementById('nameInput').value.trim();
+  const out = document.getElementById('outCheck').checked;
+  if (!name) return;
+
+  const exists = data.some(c => normalizeName(c.name) === normalizeName(name));
+  if (exists) {
+    alert("Этот ребёнок уже есть в списке");
+    return;
+  }
+
+  data.push({ name, days: {}, local: 0, away: 0, comment:'', out, collapsed:{} });
+  log("Добавлен: " + name);
+  document.getElementById('nameInput').value = '';
+  document.getElementById('outCheck').checked = false;
+  save();
+}
+
+function toggleMonth(i, code) {
+  if (!data[i].collapsed) data[i].collapsed = {};
+  data[i].collapsed[code] = !data[i].collapsed[code];
+  save();
+}
+
+function deleteChild(i) {
+  if (!confirm("Удалить ребёнка?")) return;
+  log("Удалён: " + data[i].name);
+  data.splice(i,1);
+  save();
+}
+
+function updateDay(i, key, val) {
+  if (val == 1 || val == 2) data[i].days[key] = Number(val);
+  else delete data[i].days[key];
+  log("Обновлены тренировки: " + data[i].name);
+  save();
+}
+
+function update(i, field, val) {
+  data[i][field] = field==='comment'? val : Number(val);
+  log("Обновлены данные: " + data[i].name);
+  save();
+}
+
+function calc(c) {
+  let sum = 0;
+  for (let k in c.days) sum += c.days[k];
+  return sum + c.local*15 + c.away*10;
+}
+
+function render() {
+  const viewBody = document.getElementById('viewBody');
+  const adminBody = document.getElementById('adminBody');
+  const historyList = document.getElementById('historyList');
+
+  viewBody.innerHTML = '';
+  adminBody.innerHTML = '';
+  historyList.innerHTML = '';
+
+  let sorted = [...data].sort((a,b)=>calc(b)-calc(a));
+
+  sorted.forEach((c,i)=>{
+    const tr = document.createElement('tr');
+    if (i<7 && !c.out) tr.classList.add('top7');
+    if (c.out) tr.classList.add('out');
+    tr.innerHTML = `<td>${c.name}</td><td>${calc(c)}</td>`;
+    viewBody.appendChild(tr);
+  });
+
+  let adminList = [...data].sort((a,b)=> a.name.localeCompare(b.name));
+
+  const search = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  if (search) {
+    adminList = adminList.filter(c => c.name.toLowerCase().includes(search));
+  }
+
+  adminList.forEach((c)=>{
+    const i = data.indexOf(c);
+    const tr = document.createElement('tr');
+
+    let monthsHTML = months.map(m => {
+      let collapsed = c.collapsed && c.collapsed[m.code];
+      let daysHTML = '';
+
+      if (!collapsed) {
+        for (let d=1; d<=m.days; d++) {
+          let key = m.code+'-'+d;
+          let val = c.days[key] || '';
+          daysHTML += `<div class='dayCell'>${d}<br><input type='number' min='1' max='2' value='${val}' onchange="updateDay(${i},'${key}',this.value)"></div>`;
+        }
+      }
+
+      return `
+        <div class='monthBlock'>
+          <div class='monthHeader' onclick="toggleMonth(${i},'${m.code}')">
+            ${m.name} ${collapsed ? '▶' : '▼'}
+          </div>
+          ${collapsed ? '' : daysHTML}
+        </div>
+      `;
+    });
+
+    tr.innerHTML = `
+      <td>${c.name}</td>
+      <td>${monthsHTML[0]}</td>
+      <td>${monthsHTML[1]}</td>
+      <td>${monthsHTML[2]}</td>
+      <td><input type="number" value="${c.local}" onchange="update(${i},'local',this.value)"></td>
+      <td><input type="number" value="${c.away}" onchange="update(${i},'away',this.value)"></td>
+      <td><input type="text" value="${c.comment}" onchange="update(${i},'comment',this.value)"></td>
+      <td>${calc(c)}</td>
+      <td><button class="deleteBtn" onclick="deleteChild(${i})">Удалить</button></td>
+    `;
+
+    adminBody.appendChild(tr);
+  });
+
+  history.forEach(h=>{
+    const li = document.createElement('li');
+    li.textContent = h;
+    historyList.appendChild(li);
+  });
+}
+
+function showPage(p) {
+  document.getElementById('viewPage').classList.add('hidden');
+  document.getElementById('adminPage').classList.add('hidden');
+  document.getElementById('historyPage').classList.add('hidden');
+  document.getElementById(p+'Page').classList.remove('hidden');
+}
+
+render();
+</script>
+
+</body>
+</html>
